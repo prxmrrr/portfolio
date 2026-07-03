@@ -280,6 +280,7 @@
 <div class="field"><input id="name" required="" type="text"/><label for="name">Your name</label><div class="err" id="errName"></div></div>
 <div class="field"><input id="email" required="" type="email"/><label for="email">Email</label><div class="err" id="errEmail"></div></div>
 <div class="field full"><textarea id="msg" required=""></textarea><label for="msg">What's on your mind?</label><div class="err" id="errMsg"></div></div>
+<input type="checkbox" id="botcheck" name="botcheck" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px;opacity:0;height:0;width:0;"/>
 <button class="send" id="send">Send message <span>→</span></button>
 </div>
 <div class="socials reveal">
@@ -475,19 +476,45 @@
   const send = document.getElementById('send');
   const fields = { name: document.getElementById('name'), email: document.getElementById('email'), msg: document.getElementById('msg') };
   const errs = { name: document.getElementById('errName'), email: document.getElementById('errEmail'), msg: document.getElementById('errMsg') };
-  send.addEventListener('click', () => {
+  const resetSend = () => { send.classList.remove('sent'); send.disabled = false; send.innerHTML = 'Send message <span>→</span>'; };
+  send.addEventListener('click', async () => {
     let ok = true;
     Object.values(errs).forEach(e => e.textContent = '');
     if (!fields.name.value.trim()) { errs.name.textContent = 'Add your name'; ok = false; }
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(fields.email.value)) { errs.email.textContent = 'Enter a valid email'; ok = false; }
     if (!fields.msg.value.trim()) { errs.msg.textContent = 'Write a message'; ok = false; }
+    // honeypot: if a bot filled the hidden field, silently pretend success
+    if (document.getElementById('botcheck').checked) { send.disabled = true; send.classList.add('sent'); send.innerHTML = 'Message sent ✓'; setTimeout(resetSend, 2600); return; }
     if (!ok) return;
-    // opens the visitor's mail client, prefilled. Swap you@email.com for your address.
-    const body = encodeURIComponent(fields.msg.value + '\n\n— ' + fields.name.value + ' (' + fields.email.value + ')');
-    window.location.href = 'mailto:you@email.com?subject=' + encodeURIComponent('Portfolio enquiry from ' + fields.name.value) + '&body=' + body;
-    send.classList.add('sent');
-    send.innerHTML = 'Opening mail ✓';
-    setTimeout(() => { send.classList.remove('sent'); send.innerHTML = 'Send message <span>→</span>'; }, 2600);
+
+    send.disabled = true;
+    send.innerHTML = 'Sending…';
+    try {
+      const res = await fetch('https://api.web3forms.com/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({
+          access_key: '9a686343-f44c-4279-87e2-4eafa22c2e4a',
+          subject: 'Portfolio enquiry from ' + fields.name.value,
+          name: fields.name.value,
+          email: fields.email.value,
+          message: fields.msg.value
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        send.classList.add('sent');
+        send.innerHTML = 'Message sent ✓';
+        fields.name.value = ''; fields.email.value = ''; fields.msg.value = '';
+        setTimeout(resetSend, 2600);
+      } else {
+        throw new Error(data.message || 'failed');
+      }
+    } catch (err) {
+      send.classList.add('sent');
+      send.innerHTML = 'Send failed, retry';
+      setTimeout(resetSend, 2600);
+    }
   });
 </script>
 </body>
